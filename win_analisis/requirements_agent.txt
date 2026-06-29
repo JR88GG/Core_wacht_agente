@@ -1,0 +1,13 @@
+# SysWatch Agent — Dependencias
+# Instalar con: pip install -r requirements_agent.txt
+
+psutil>=5.9.0       # métricas de CPU, RAM, disco, procesos
+requests>=2.31.0    # envío HTTP al hub
+
+# Solo Windows (temperaturas via WMI):
+# pip install wmi pywin32
+# Requiere OpenHardwareMonitor corriendo como administrador
+# para temperaturas reales de CPU
+
+# Para instalar como servicio Windows sin NSSM (opcional):
+# pip install pywin32
