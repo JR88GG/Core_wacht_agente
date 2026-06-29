@@ -80,3 +80,4 @@ syswatch_local.db → se crea sola al primer arranque
 ```
 
 Todo lo demás es idéntico. El `HUB_HOST` y `HUB_API_KEY` deben ser exactamente los mismos en todos los equipos.
+prueba
