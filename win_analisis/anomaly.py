@@ -1,7 +1,6 @@
 # ============================================================
 #  SysWatch Agent — Detector de anomalías
 #  Z-score dinámico + reglas fijas + tendencias predictivas
-#  Sin IA, sin dependencias externas. ~0 MB RAM adicional.
 # ============================================================
 
 import logging
