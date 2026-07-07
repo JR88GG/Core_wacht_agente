@@ -1,0 +1,11 @@
+psutil>=5.9
+requests>=2.31
+Flask>=3.0
+psycopg2-binary>=2.9
+
+# Opcional — solo si hay GPU NVIDIA y se quiere reportar gpu_metricas:
+# nvidia-ml-py>=12.535
+
+# Solo necesario en Windows, para leer WMI (hardware/USB):
+# pywin32>=306
+# wmi>=1.5.1
