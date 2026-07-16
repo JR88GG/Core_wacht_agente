@@ -14,6 +14,7 @@ import threading
 import time
 
 from flask import Flask, request, jsonify
+from psycopg2.extras import execute_values
 
 import db
 import network_scan
@@ -57,6 +58,7 @@ def _sincronizar_perifericos_usb(cur, equipo_id: str, perifericos_actuales: list
 
     claves_actuales = set()
 
+    a_insertar = []
     for periferico in perifericos_actuales:
         clave = _clave_periferico(periferico)
         claves_actuales.add(clave)
@@ -65,25 +67,29 @@ def _sincronizar_perifericos_usb(cur, equipo_id: str, perifericos_actuales: list
         if estaba_conectado is True:
             continue  # sin cambios, no insertar de nuevo
 
-        cur.execute("""
-            INSERT INTO perifericos_usb (
-                equipo_id, nombre, tipo, fabricante, vendor_id, product_id,
-                serial, bus, direccion_dispositivo, ubicacion_puerto, velocidad, conectado
-            ) VALUES (
-                %(equipo_id)s, %(nombre)s, %(tipo)s, %(fabricante)s, %(vendor_id)s, %(product_id)s,
-                %(serial)s, %(bus)s, %(direccion_dispositivo)s, %(ubicacion_puerto)s, %(velocidad)s, %(conectado)s
-            );
-        """, periferico)
+        a_insertar.append((
+            periferico["equipo_id"], periferico["nombre"], periferico["tipo"], periferico["fabricante"],
+            periferico["vendor_id"], periferico["product_id"], periferico["serial"], periferico["bus"],
+            periferico["direccion_dispositivo"], periferico["ubicacion_puerto"], periferico["velocidad"],
+            periferico["conectado"],
+        ))
 
     # Dispositivos que SÍ estaban conectados antes pero ya no aparecen -> marcar desconexión
     for clave, estaba_conectado in estado_previo.items():
         if estaba_conectado is True and clave not in claves_actuales:
             nombre, vendor_id, product_id = clave
-            cur.execute("""
-                INSERT INTO perifericos_usb (
-                    equipo_id, nombre, vendor_id, product_id, conectado
-                ) VALUES (%s, %s, %s, %s, false);
-            """, (equipo_id, nombre, vendor_id, product_id))
+            a_insertar.append((
+                equipo_id, nombre, None, None, vendor_id, product_id,
+                None, None, None, None, None, False,
+            ))
+
+    if a_insertar:
+        execute_values(cur, """
+            INSERT INTO perifericos_usb (
+                equipo_id, nombre, tipo, fabricante, vendor_id, product_id,
+                serial, bus, direccion_dispositivo, ubicacion_puerto, velocidad, conectado
+            ) VALUES %s
+        """, a_insertar)
 
 
 def guardar_payload_agente(payload: dict, cliente_id: int):
@@ -137,59 +143,69 @@ def guardar_payload_agente(payload: dict, cliente_id: int):
                 );
             """, metricas)
 
-        # --- 3. GPU ---
-        for gpu in payload.get("gpu_metricas") or []:
-            cur.execute("""
+        # --- 3. GPU (en lote) ---
+        gpus = payload.get("gpu_metricas") or []
+        if gpus:
+            execute_values(cur, """
                 INSERT INTO gpu_metricas (
                     equipo_id, uso_gpu, temperatura, memoria_usada_mb, memoria_total_mb,
                     encoder, decoder, consumo_watts, modelo, fabricante, driver_gpu
-                ) VALUES (
-                    %(equipo_id)s, %(uso_gpu)s, %(temperatura)s, %(memoria_usada_mb)s, %(memoria_total_mb)s,
-                    %(encoder)s, %(decoder)s, %(consumo_watts)s, %(modelo)s, %(fabricante)s, %(driver_gpu)s
-                );
-            """, gpu)
+                ) VALUES %s
+            """, [
+                (g["equipo_id"], g["uso_gpu"], g["temperatura"], g["memoria_usada_mb"], g["memoria_total_mb"],
+                 g["encoder"], g["decoder"], g["consumo_watts"], g["modelo"], g["fabricante"], g["driver_gpu"])
+                for g in gpus
+            ])
 
-        # --- 4. Discos ---
-        for disco in payload.get("discos") or []:
-            cur.execute("""
+        # --- 4. Discos (en lote) ---
+        discos = payload.get("discos") or []
+        if discos:
+            execute_values(cur, """
                 INSERT INTO discos (
                     equipo_id, nombre, tipo, capacidad_gb, espacio_libre_gb,
                     porcentaje_usado, temperatura, serial, estado_smart, vida_util
-                ) VALUES (
-                    %(equipo_id)s, %(nombre)s, %(tipo)s, %(capacidad_gb)s, %(espacio_libre_gb)s,
-                    %(porcentaje_usado)s, %(temperatura)s, %(serial)s, %(estado_smart)s, %(vida_util)s
-                );
-            """, disco)
+                ) VALUES %s
+            """, [
+                (d["equipo_id"], d["nombre"], d["tipo"], d["capacidad_gb"], d["espacio_libre_gb"],
+                 d["porcentaje_usado"], d["temperatura"], d["serial"], d["estado_smart"], d["vida_util"])
+                for d in discos
+            ])
 
-        # --- 5. Procesos (justo el caso del enunciado: si esto falla, todo se revierte) ---
-        for proceso in payload.get("procesos") or []:
-            cur.execute("""
+        # --- 5. Procesos (en lote) — justo el caso del enunciado: si esto falla, todo se revierte ---
+        procesos = payload.get("procesos") or []
+        if procesos:
+            execute_values(cur, """
                 INSERT INTO procesos (
                     equipo_id, nombre, pid, cpu_pct, ram_mb, es_sospechoso
-                ) VALUES (
-                    %(equipo_id)s, %(nombre)s, %(pid)s, %(cpu_pct)s, %(ram_mb)s, %(es_sospechoso)s
-                );
-            """, proceso)
+                ) VALUES %s
+            """, [
+                (p["equipo_id"], p["nombre"], p["pid"], p["cpu_pct"], p["ram_mb"], p["es_sospechoso"])
+                for p in procesos
+            ])
 
-        # --- 6. Interfaces de red ---
-        for interfaz in payload.get("interfaces_red") or []:
-            cur.execute("""
+        # --- 6. Interfaces de red (en lote) ---
+        interfaces = payload.get("interfaces_red") or []
+        if interfaces:
+            execute_values(cur, """
                 INSERT INTO interfaces_red (
                     equipo_id, nombre, mac, ip, gateway, dns, velocidad, estado
-                ) VALUES (
-                    %(equipo_id)s, %(nombre)s, %(mac)s, %(ip)s, %(gateway)s, %(dns)s, %(velocidad)s, %(estado)s
-                );
-            """, interfaz)
+                ) VALUES %s
+            """, [
+                (i["equipo_id"], i["nombre"], i["mac"], i["ip"], i["gateway"], i["dns"], i["velocidad"], i["estado"])
+                for i in interfaces
+            ])
 
-        # --- 7. Puertos abiertos ---
-        for puerto in payload.get("puertos_abiertos") or []:
-            cur.execute("""
+        # --- 7. Puertos abiertos (en lote) ---
+        puertos = payload.get("puertos_abiertos") or []
+        if puertos:
+            execute_values(cur, """
                 INSERT INTO puertos_abiertos (
                     equipo_id, puerto, protocolo, servicio, estado, proceso, pid
-                ) VALUES (
-                    %(equipo_id)s, %(puerto)s, %(protocolo)s, %(servicio)s, %(estado)s, %(proceso)s, %(pid)s
-                );
-            """, puerto)
+                ) VALUES %s
+            """, [
+                (pt["equipo_id"], pt["puerto"], pt["protocolo"], pt["servicio"], pt["estado"], pt["proceso"], pt["pid"])
+                for pt in puertos
+            ])
 
         # --- 8. Periféricos USB (solo se inserta si algo CAMBIÓ, no en cada ciclo) ---
         perifericos_actuales = payload.get("perifericos_usb") or []
@@ -303,6 +319,64 @@ def _bucle_escaneo_red(cliente_id: int, intervalo_segundos: int):
 
 
 # ======================================================
+# LIMPIEZA / RETENCIÓN DE DATOS ANTIGUOS
+# ======================================================
+# Sin esto, tablas como agent_payload/procesos/discos crecen sin límite
+# para siempre. Cada tabla usa su propia columna de tiempo (algunas usan
+# "timestamp", otras "fecha", otras "created_at").
+
+TABLAS_RETENCION = [
+    # (tabla, columna_de_tiempo, dias_de_retencion_por_defecto)
+    ("agent_payload",     "created_at", 7),   # payload crudo — el más pesado, retención corta
+    ("metricas",          "timestamp",  30),
+    ("gpu_metricas",      "timestamp",  30),
+    ("discos",            "fecha",      30),
+    ("procesos",          "timestamp",  14),  # el que más filas genera (hasta 25 por ciclo)
+    ("interfaces_red",    "fecha",      30),
+    ("puertos_abiertos",  "timestamp",  30),
+    ("network_scans",     "created_at", 30),
+]
+
+
+def _limpiar_datos_antiguos(config: dict):
+    for tabla, columna, dias_default in TABLAS_RETENCION:
+        dias = config.get(f"retencion_dias_{tabla}", dias_default)
+        try:
+            with db.with_transaction() as cur:
+                cur.execute(
+                    f"DELETE FROM {tabla} WHERE {columna} < now() - interval '{dias} days';"
+                )
+                borradas = cur.rowcount
+            if borradas:
+                log.info("Limpieza: %s filas eliminadas de %s (retención %sd)", borradas, tabla, dias)
+        except Exception as error:
+            log.error("Error limpiando %s: %s", tabla, error)
+
+    # network_scan_hosts no tiene columna de fecha propia — depende de su scan_id.
+    # Se borran los huérfanos (cuyo network_scans padre ya fue eliminado arriba).
+    try:
+        with db.with_transaction() as cur:
+            cur.execute("""
+                DELETE FROM network_scan_hosts
+                WHERE scan_id NOT IN (SELECT id FROM network_scans);
+            """)
+            borradas = cur.rowcount
+        if borradas:
+            log.info("Limpieza: %s filas huérfanas eliminadas de network_scan_hosts", borradas)
+    except Exception as error:
+        log.error("Error limpiando network_scan_hosts: %s", error)
+
+
+def _bucle_limpieza(config: dict, intervalo_segundos: int = 24 * 60 * 60):
+    while True:
+        try:
+            _limpiar_datos_antiguos(config)
+        except Exception as error:
+            log.error("Error inesperado en el ciclo de limpieza: %s", error)
+        time.sleep(intervalo_segundos)
+
+
+# ======================================================
 # PUNTO DE ENTRADA DEL SERVIDOR
 # ======================================================
 
@@ -310,7 +384,7 @@ def iniciar_servidor(config: dict):
     global _config
     _config = config
 
-    db.inicializar_pool(config["db_url"])
+    db.inicializar_pool(config["db_url"], maxconn=config.get("db_pool_maxconn", 30))
 
     hilo_escaneo = threading.Thread(
         target=_bucle_escaneo_red,
@@ -318,6 +392,13 @@ def iniciar_servidor(config: dict):
         daemon=True,
     )
     hilo_escaneo.start()
+
+    hilo_limpieza = threading.Thread(
+        target=_bucle_limpieza,
+        args=(config,),
+        daemon=True,
+    )
+    hilo_limpieza.start()
 
     log.info("Servidor CoreWatch escuchando en el puerto %s", config["puerto"])
     app.run(host="0.0.0.0", port=config["puerto"], threaded=True)

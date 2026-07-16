@@ -17,7 +17,7 @@ log = logging.getLogger("corewatch.db")
 _pool: SimpleConnectionPool = None
 
 
-def inicializar_pool(db_url: str, minconn=1, maxconn=10):
+def inicializar_pool(db_url: str, minconn=1, maxconn=30):
     global _pool
     _pool = SimpleConnectionPool(minconn, maxconn, dsn=db_url)
     log.info("Pool de conexiones a PostgreSQL inicializado.")
