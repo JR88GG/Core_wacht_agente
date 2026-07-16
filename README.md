@@ -13,7 +13,6 @@
 |---------|-----------|
 | `corewatch_agent.zip` | Proyecto completo del agente/servidor Python |
 | `agregar_clientes_usuarios.sql` | Alta de Jimmy, Wilfredo, Herber, Jason + usuarios ADMIN |
-| `credenciales_temporales.txt` | Contraseñas en texto plano para distribuir (borrar después) |
 | `indices_series_tiempo.sql` | Índices de rendimiento para las tablas de series de tiempo |
 | `migracion_network_scans_equipo_id.sql` | Corrección histórica de `network_scans.equipo_id` (ya reflejada en `base.sql`) |
 
