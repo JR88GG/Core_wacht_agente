@@ -12,8 +12,6 @@
 | Archivo | Contenido |
 |---------|-----------|
 | `corewatch_agent.zip` | Proyecto completo del agente/servidor Python |
-| `monitoreo.js` | Backend Node con aislamiento multi-cliente aplicado |
-| `main.js` | Frontend con el fix de temperatura N/A |
 | `agregar_clientes_usuarios.sql` | Alta de Jimmy, Wilfredo, Herber, Jason + usuarios ADMIN |
 | `credenciales_temporales.txt` | Contraseñas en texto plano para distribuir (borrar después) |
 | `indices_series_tiempo.sql` | Índices de rendimiento para las tablas de series de tiempo |
